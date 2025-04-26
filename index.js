@@ -82,7 +82,10 @@ function connectMinecraft() {
       hideErrors: false
     });
 
-    // Manejo de eventos
+    bot.on('login', () => {
+      console.log('✅ Conectado al servidor Minecraft');
+    });
+
     bot.on('chat', (message) => {
       if (typeof message === 'string' && message.includes('/login')) {
         bot.chat(`/login ${config.mc.authmePassword}`);
@@ -159,10 +162,6 @@ async function checkServerStatus() {
     return { online: false, players: 0 };
   }
 }
-bot.on('login', () => {
-    console.log('✅ Conectado al servidor Minecraft');
-  });
-}
 
 // Inicialización segura
 client.login(config.discord.token)
@@ -176,6 +175,6 @@ client.login(config.discord.token)
           startServer();
         }
       });
-    }, 900000); // Verificación cada 15 minutos
+    }, 900000);
   })
   .catch(error => console.error('❌ Error de conexión con Discord:', error));
