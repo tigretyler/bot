@@ -3,178 +3,243 @@ const puppeteer = require('puppeteer');
 const mc = require('minecraft-protocol');
 const fetch = require('node-fetch');
 
+// Configuración avanzada de intents
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages
-  ]
+  ],
+  presence: {
+    status: 'online',
+    activities: [{
+      name: 'Minecraft 24/7',
+      type: 'PLAYING'
+    }]
+  }
 });
 
-// Configuración
+// Configuración modularizada
 const config = {
   aternos: {
     user: process.env.ATERNOS_USER,
-    pass: process.env.ATERNOS_PASS
+    pass: process.env.ATERNOS_PASS,
+    serverUrl: 'https://aternos.org/go/',
+    selectors: {
+      userInput: '#user',
+      passInput: '#password',
+      loginBtn: '.login-button',
+      serverStatus: '.server-status',
+      startBtn: '.btn-start'
+    }
   },
   mc: {
     host: 'anecraft.aternos.me',
     port: 22667,
-    authmePassword: 'sdfdsfdsfsd',
-    botUsername: 'KeepAliveBot'
+    authmePassword: process.env.AUTHME_PASSWORD,
+    botUsername: 'KeepAliveBot',
+    version: '1.19.1',
+    afkInterval: 120000 // 2 minutos
   },
   discord: {
     token: process.env.DISCORD_TOKEN,
-    channelId: '1363207617803059281'
+    channelId: '1363207617803059281',
+    statusCheckInterval: 900000 // 15 minutos
   }
 };
 
-// Función mejorada para iniciar servidor Aternos
+// Gestión avanzada de Aternos
 async function startServer() {
   const browser = await puppeteer.launch({
     headless: true,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage'
+      '--disable-dev-shm-usage',
+      '--single-process'
     ]
   });
-  
+
   try {
     const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'en-US,en;q=0.9'
+    });
     
-    // Navegación y login
-    await page.goto('https://aternos.org/go/', { waitUntil: 'networkidle2', timeout: 30000 });
-    await page.type('#user', config.aternos.user);
-    await page.type('#password', config.aternos.password);
-    await page.click('.login-button');
-    
-    // Esperar carga completa
-    await page.waitForSelector('.server-status', { timeout: 15000 });
-    
-    // Iniciar servidor
-    const startButton = await page.$('.btn-start');
+    // Navegación con manejo de errores mejorado
+    await page.goto(config.aternos.serverUrl, {
+      waitUntil: 'networkidle2',
+      timeout: 45000
+    });
+
+    // Sistema de login robusto
+    await page.type(config.aternos.selectors.userInput, config.aternos.user);
+    await page.type(config.aternos.selectors.passInput, config.aternos.pass);
+    await Promise.all([
+      page.waitForNavigation(),
+      page.click(config.aternos.selectors.loginBtn)
+    ]);
+
+    // Verificación de estado del servidor
+    await page.waitForSelector(config.aternos.selectors.serverStatus, {
+      visible: true,
+      timeout: 20000
+    });
+
+    // Inicio del servidor con validación
+    const startButton = await page.$(config.aternos.selectors.startBtn);
     if (startButton) {
-      await startButton.click();
-      await page.waitForSelector('.statuslabel-status', { timeout: 300000 });
+      await Promise.all([
+        page.click(config.aternos.selectors.startBtn),
+        page.waitForSelector('.statuslabel-status', { timeout: 300000 })
+      ]);
       return true;
     }
     return false;
+
   } catch (error) {
-    console.error('Error al iniciar servidor:', error.message);
+    console.error(`[Aternos Error] ${error.message}`);
     return false;
   } finally {
     await browser.close();
   }
 }
 
-// Conexión Minecraft mejorada con manejo de errores
-function connectMinecraft() {
-  try {
-    const bot = mc.createBot({
-      host: config.mc.host,
-      port: config.mc.port,
-      username: config.mc.botUsername,
-      auth: 'offline',
-      version: '1.19.1',
-      hideErrors: false
-    });
+// Conexión Minecraft profesional
+function createMinecraftConnection() {
+  const mcClient = mc.createClient({
+    host: config.mc.host,
+    port: config.mc.port,
+    username: config.mc.botUsername,
+    auth: 'offline',
+    version: config.mc.version,
+    hideErrors: false,
+    checkTimeoutInterval: 30000
+  });
 
-    bot.on('login', () => {
-      console.log('✅ Conectado al servidor Minecraft');
-    });
+  // Eventos mejorados
+  mcClient.on('connect', () => {
+    console.log('[MC] Conexión establecida');
+    mcClient.chat(`/login ${config.mc.authmePassword}`);
+  });
 
-    bot.on('chat', (message) => {
-      if (typeof message === 'string' && message.includes('/login')) {
-        bot.chat(`/login ${config.mc.authmePassword}`);
-      }
-    });
+  mcClient.on('end', (reason) => {
+    console.log(`[MC] Desconexión: ${reason}`);
+    setTimeout(createMinecraftConnection, 15000);
+  });
 
-    bot.on('end', (reason) => {
-      console.log(`Desconectado: ${reason}`);
-      setTimeout(connectMinecraft, 10000);
-    });
+  mcClient.on('error', (err) => {
+    console.error(`[MC Error] ${err.message}`);
+    setTimeout(createMinecraftConnection, 30000);
+  });
 
-    bot.on('error', (err) => {
-      console.error('Error de conexión:', err);
-      setTimeout(connectMinecraft, 15000);
-    });
+  // Sistema anti-AFK avanzado
+  const afkActions = () => {
+    try {
+      mcClient.chat(`/login ${config.mc.authmePassword}`);
+      mcClient.setControlState('jump', true);
+      setTimeout(() => mcClient.setControlState('jump', false), 500);
+      mcClient.look(
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2
+      );
+    } catch (error) {
+      console.error(`[AFK Error] ${error.message}`);
+    }
+  };
 
-    // Sistema anti-AFK
-    const performActions = () => {
-      try {
-        bot.chat(`/login ${config.mc.authmePassword}`);
-        bot.setControlState('jump', true);
-        setTimeout(() => bot.setControlState('jump', false), 500);
-        bot.look(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
-      } catch (actionError) {
-        console.error('Error en acciones anti-AFK:', actionError);
-      }
-    };
-
-    setInterval(performActions, 120000);
-    performActions();
-
-  } catch (error) {
-    console.error('Error en conexión inicial:', error);
-    setTimeout(connectMinecraft, 20000);
-  }
+  setInterval(afkActions, config.mc.afkInterval);
+  afkActions();
 }
 
-// Sistema de comandos de Discord
+// Sistema de comandos profesional
 client.on('messageCreate', async (message) => {
   if (message.author.bot || message.channel.id !== config.discord.channelId) return;
 
   try {
-    const command = message.content.toLowerCase();
+    const command = message.content.toLowerCase().trim();
     
-    if (command === '!start') {
-      await message.channel.sendTyping();
-      const success = await startServer();
-      await message.reply(success ? '🟢 Servidor en proceso de inicio...' : '🔴 Error al iniciar el servidor');
-    }
-
-    if (command === '!status') {
-      await message.channel.sendTyping();
-      const status = await checkServerStatus();
-      const response = status.online 
-        ? `🟢 Servidor Online\nJugadores conectados: ${status.players}`
-        : '🔴 Servidor Offline';
-      await message.reply(response);
+    switch(command) {
+      case '!start':
+        await handleStartCommand(message);
+        break;
+      
+      case '!status':
+        await handleStatusCommand(message);
+        break;
     }
   } catch (error) {
-    console.error('Error procesando comando:', error);
+    console.error(`[Command Error] ${error.message}`);
   }
 });
 
-// Verificador de estado del servidor
+async function handleStartCommand(message) {
+  await message.channel.sendTyping();
+  const success = await startServer();
+  await message.reply({
+    content: success ? '🟢 Iniciando servidor...' : '🔴 Error al iniciar',
+    ephemeral: true
+  });
+}
+
+async function handleStatusCommand(message) {
+  await message.channel.sendTyping();
+  const status = await checkServerStatus();
+  const embed = new EmbedBuilder()
+    .setTitle('Estado del Servidor')
+    .setColor(status.online ? '#00ff00' : '#ff0000')
+    .addFields(
+      { name: 'Estado', value: status.online ? 'Online' : 'Offline', inline: true },
+      { name: 'Jugadores', value: status.players.toString(), inline: true }
+    );
+  
+  await message.reply({ embeds: [embed] });
+}
+
+// Sistema de monitoreo mejorado
 async function checkServerStatus() {
   try {
-    const response = await fetch(`https://api.mcsrvstat.us/3/${config.mc.host}:${config.mc.port}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    
+    const response = await fetch(`https://api.mcsrvstat.us/3/${config.mc.host}:${config.mc.port}`, {
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeout);
     const data = await response.json();
+    
     return {
       online: data.online || false,
-      players: data.players?.online || 0
+      players: data.players?.online || 0,
+      version: data.version || 'N/A'
     };
   } catch (error) {
-    return { online: false, players: 0 };
+    return { online: false, players: 0, version: 'N/A' };
   }
 }
 
-// Inicialización segura
-client.login(config.discord.token)
-  .then(() => {
-    console.log('✅ Bot de Discord conectado');
-    setTimeout(connectMinecraft, 5000);
-    setInterval(() => {
-      checkServerStatus().then(status => {
-        if (!status.online) {
-          console.log('🔄 Intentando iniciar servidor...');
-          startServer();
-        }
-      });
-    }, 900000);
-  })
-  .catch(error => console.error('❌ Error de conexión con Discord:', error));
+// Inicialización profesional
+async function initialize() {
+  try {
+    await client.login(config.discord.token);
+    console.log('[Discord] Bot autenticado');
+    
+    setTimeout(createMinecraftConnection, 5000);
+    
+    setInterval(async () => {
+      const { online } = await checkServerStatus();
+      if (!online) {
+        console.log('[Monitor] Servidor offline - Reiniciando...');
+        await startServer();
+      }
+    }, config.discord.statusCheckInterval);
+    
+  } catch (error) {
+    console.error(`[Init Error] ${error.message}`);
+    process.exit(1);
+  }
+}
+
+initialize();
