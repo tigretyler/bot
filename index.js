@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const puppeteer = require('puppeteer');
-const { createBot } = require('minecraft-protocol');
+const mc = require('minecraft-protocol');
 const fetch = require('node-fetch');
 
 const client = new Client({
@@ -73,7 +73,7 @@ async function startServer() {
 // Conexión Minecraft mejorada con manejo de errores
 function connectMinecraft() {
   try {
-    const bot = createBot({
+    const bot = mc.createBot({
       host: config.mc.host,
       port: config.mc.port,
       username: config.mc.botUsername,
@@ -158,6 +158,10 @@ async function checkServerStatus() {
   } catch (error) {
     return { online: false, players: 0 };
   }
+}
+bot.on('login', () => {
+    console.log('✅ Conectado al servidor Minecraft');
+  });
 }
 
 // Inicialización segura
