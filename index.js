@@ -10,14 +10,14 @@ const config = {
     pass: process.env.ATERNOS_PASS
   },
   mc: {
-    host: 'TU_SERVIDOR.aternos.me',
-    port: 25565,
-    authmePassword: 'CONTRASEÑA_AUTHME',
+    host: 'anecraft.aternos.me',
+    port: 22667,
+    authmePassword: 'sdfdsfdsfsd',
     botUsername: 'KeepAliveBot'
   },
   discord: {
     token: process.env.DISCORD_TOKEN,
-    channelId: 'ID_CANAL_DISCORD'
+    channelId: '1363207617803059281'
   }
 };
 
