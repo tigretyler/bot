@@ -1,120 +1,73 @@
-const { Client, GatewayIntentBits } = require('discord.js');
-const puppeteer = require('puppeteer');
-const fetch = require('node-fetch');
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+const mineflayer = require('mineflayer')
+const cmd = require('mineflayer-cmd').plugin
+const fs = require('fs');
+let rawdata = fs.readFileSync('config.json');
+let data = JSON.parse(rawdata);
+var lasttime = -1;
+var moving = 0;
+var connected = 0;
+var actions = [ 'forward', 'back', 'left', 'right']
+var lastaction;
+var pi = 3.14159;
+var moveinterval = 2; // 2 second movement interval
+var maxrandom = 5; // 0-5 seconds added to movement interval (randomly)
+var host = data["ip"];
+var username = data["name"]
+var nightskip = data["auto-night-skip"]
+var bot = mineflayer.createBot({
+  host: host,
+  username: username
 });
+function getRandomArbitrary(min, max) {
+       return Math.random() * (max - min) + min;
 
-// Configuración
-const config = {
-  aternos: {
-    user: process.env.ATERNOS_USER,
-    pass: process.env.ATERNOS_PASS,
-    serverUrl: 'https://aternos.org/go/'
-  },
-  discord: {
-    token: process.env.DISCORD_TOKEN,
-    channelId: '1363207617803059281'
-  }
-};
-
-// Función mejorada para iniciar servidor
-async function startServer() {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--single-process'
-    ],
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
-  });
-
-  try {
-    const page = await browser.newPage();
-    
-    // Configuración de navegación
-    await page.setViewport({ width: 1920, height: 1080 });
-    await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36');
-
-    // Navegación a Aternos
-    await page.goto(config.aternos.serverUrl, {
-      waitUntil: 'networkidle2',
-      timeout: 45000
-    });
-
-    // Login
-    await page.type('#user', config.aternos.user);
-    await page.type('#password', config.aternos.pass);
-    await page.click('.login-button');
-    await page.waitForNavigation({ timeout: 15000 });
-
-    // Iniciar servidor
-    await page.waitForSelector('.btn-start', { timeout: 20000 });
-    await page.click('.btn-start');
-    await page.waitForSelector('.statuslabel-status', { timeout: 300000 });
-
-    return true;
-  } catch (error) {
-    console.error('[Aternos Error]', error.message);
-    return false;
-  } finally {
-    await browser.close();
-  }
 }
 
-// Verificación de estado mejorada
-async function checkStatus() {
-  try {
-    const response = await fetch(`https://api.mcsrvstat.us/3/anecraft.aternos.me:22667`);
-    if (!response.ok) throw new Error('API no responde');
-    
-    const data = await response.json();
-    return {
-      online: data.online,
-      players: data.players?.online || 0,
-      version: data.version || 'Desconocida'
-    };
-  } catch (error) {
-    return { online: false, players: 0, version: 'Error' };
-  }
-}
+bot.loadPlugin(cmd)
 
-// Sistema de comandos
-client.on('messageCreate', async (message) => {
-  if (message.author.bot || message.channel.id !== config.discord.channelId) return;
 
-  try {
-    const command = message.content.toLowerCase().trim();
-    
-    if (command === '!start') {
-      await message.channel.sendTyping();
-      const success = await startServer();
-      message.reply(success ? '✅ Servidor en proceso de inicio' : '❌ Error al iniciar');
-    }
 
-    if (command === '!status') {
-      await message.channel.sendTyping();
-      const { online, players, version } = await checkStatus();
-      message.reply(
-        online 
-          ? `🟢 **Online**\nJugadores: ${players}\nVersión: ${version}`
-          : '🔴 **Offline**'
-      );
-    }
-  } catch (error) {
-    console.error('[Command Error]', error);
-    message.reply('⚠️ Error procesando comando');
-  }
+bot.on('login',function(){
+	console.log("Logged In")
+	bot.chat("hello");
 });
 
-// Inicialización
-client.login(config.discord.token)
-  .then(() => console.log('🤖 Bot iniciado correctamente'))
-  .catch(error => console.error('💥 Error crítico:', error));
+bot.on('time', function(time) {
+	if(nightskip == "true"){
+	if(bot.time.timeOfDay >= 13000){
+	bot.chat('/time set day')
+	}}
+    if (connected <1) {
+        return;
+    }
+    if (lasttime<0) {
+        lasttime = bot.time.age;
+    } else {
+        var randomadd = Math.random() * maxrandom * 20;
+        var interval = moveinterval*20 + randomadd;
+        if (bot.time.age - lasttime > interval) {
+            if (moving == 1) {
+                bot.setControlState(lastaction,false);
+                moving = 0;
+                lasttime = bot.time.age;
+            } else {
+                var yaw = Math.random()*pi - (0.5*pi);
+                var pitch = Math.random()*pi - (0.5*pi);
+                bot.look(yaw,pitch,false);
+                lastaction = actions[Math.floor(Math.random() * actions.length)];
+                bot.setControlState(lastaction,true);
+                moving = 1;
+                lasttime = bot.time.age;
+                bot.activateItem();
+            }
+        }
+    }
+});
+
+bot.on('spawn',function() {
+    connected=1;
+});
+
+bot.on('death',function() {
+    bot.emit("respawn")
+});
