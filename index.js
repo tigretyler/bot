@@ -1,4 +1,5 @@
 const mineflayer = require('mineflayer')
+const port = process.env.PORT || 22667
 const cmd = require('mineflayer-cmd').plugin
 const fs = require('fs');
 let rawdata = fs.readFileSync('config.json');
