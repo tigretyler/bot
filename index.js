@@ -78,7 +78,7 @@ function connectMinecraft() {
       port: config.mc.port,
       username: config.mc.botUsername,
       auth: 'offline',
-      version: '1.20.1',
+      version: '1.19.1',
       hideErrors: false
     });
 
